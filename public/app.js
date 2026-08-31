@@ -12,6 +12,24 @@ const newChatBtn = $('#newChatBtn');
 const modeChip = $('#modeChip');
 const modeText = $('#modeText');
 const demoChip = $('#demoChip');
+const themeToggle = $('#themeToggle');
+
+/* ============================================================ theme */
+const THEME_KEY = 'calibiai_theme';
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+function applyTheme(theme) {
+  const t = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+  if (themeToggle) themeToggle.title = t === 'dark' ? 'Switch to white theme' : 'Switch to dark theme';
+}
+function toggleTheme() {
+  applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+}
+if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 
 /* ============================================================ state */
 const HISTORY_KEY = 'calibiai_chats_v1';
@@ -133,7 +151,7 @@ function createAiShell() {
   const head = document.createElement('div');
   head.className = 'msg-head';
   head.innerHTML = `
-    <div class="mini-avatar">C</div>
+    <img src="/logo.png" alt="CalibiAI" class="mini-avatar" />
     <div class="who">CalibiAI Costing Agent</div>
     <span class="pill-est" hidden>Estimate ready</span>
     <div class="when">${nowTime()}</div>`;
@@ -404,6 +422,7 @@ document.querySelectorAll('.chip').forEach((chip) => {
 
 /* ============================================================ status on load */
 (async () => {
+  applyTheme(currentTheme());
   renderHistory();
   try {
     const res = await fetch('/api/status');
