@@ -101,7 +101,8 @@ Sessions live in memory for 12 hours.
 - **Logo** — replace `public/logo.png` (transparent PNG, ≈500×140 px recommended). The same file is used by the web UI and the PDF cover.
 - **Pricing rules / rates / margins / playbook** — edit `server/systemPrompt.js`. Everything the agent knows about CalibiAI's commercial policy lives there.
 - **Demo response** — `server/demo.js`.
-- **PDF sections exposed to clients** — the filter in `server/pdf.js` (`filterClientBlocks`), currently sections 1, 2, 11, 12, 18. Keep internal economics out of it.
+- **PDF sections exposed to clients** — the filter in `server/pdf.js` (`filterClientBlocks`), currently sections 1, 2, 11, 12, 18. They are renamed to client-friendly titles (Project Overview, Proposed Solution, Delivery Timeline, Payment Terms, Proposal Summary) and renumbered 1–5 so the client never sees gaps. Keep internal economics out of it.
+- **Client-facing summary layout** — section 18 of `server/systemPrompt.js` defines the fixed structure (intro paragraph → *What You Get* bullets → *Commercial Summary* key/value table → *Next Steps* → sign-off). On screen it is rendered as a highlighted **client-ready** card with a **Copy Client Summary** button that produces clean, paste-ready text for email/WhatsApp.
 
 ## Notes
 

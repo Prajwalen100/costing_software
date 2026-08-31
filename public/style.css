@@ -426,6 +426,69 @@ button { font-family: inherit; cursor: pointer; }
 
 .md .streaming-note { color: var(--muted-2); font-size: 12px; }
 
+
+/* ============ client-facing summary card ============ */
+.md .client-summary {
+  margin: 22px 0 6px;
+  border: 1px solid var(--accent-soft-border, var(--border));
+  border-left: 4px solid var(--accent-text);
+  border-radius: 14px;
+  background: var(--accent-soft-bg);
+  overflow: hidden;
+}
+.md .client-summary-head {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-soft);
+}
+.md .client-summary-head h2 {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+.md .client-summary-badge {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: var(--success-text);
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  border-radius: 20px;
+  padding: 3px 9px;
+}
+.md .client-summary-sub {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.md .client-summary-body { padding: 14px 18px 16px; }
+.md .client-summary-body > *:first-child { margin-top: 0; }
+.md .client-summary-body > *:last-child { margin-bottom: 0; }
+.md .client-summary-body h3 {
+  margin: 16px 0 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.md .client-summary-body .tbl-wrap {
+  background: var(--bg-soft);
+  border-color: var(--border);
+}
+.md .client-summary-body table { font-size: 12.5px; }
+.md .client-summary-body td:first-child {
+  width: 32%;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.md .client-summary-body ul { padding-left: 18px; }
+.md .client-summary-body li { margin: 5px 0; }
+.md .client-summary-body ol { padding-left: 20px; }
+
 /* ============ action row ============ */
 .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
 .action-btn {
@@ -446,6 +509,8 @@ button { font-family: inherit; cursor: pointer; }
 .action-btn.primary:hover { filter: brightness(1.12); }
 .action-btn.green { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
 .action-btn.green:hover { background: var(--success-bg); filter: brightness(0.96); }
+.action-btn.soft { background: var(--accent-soft-bg); border-color: var(--accent-text-2); color: var(--accent-text); }
+.action-btn.soft:hover { filter: brightness(0.98); }
 .action-btn svg { width: 14px; height: 14px; }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 

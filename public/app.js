@@ -156,6 +156,7 @@ function renderMessage(m, { animate = false } = {}) {
   if (m.role === 'user') { renderUserMessage(m.content); return; }
   const shell = createAiShell();
   shell.bodyEl.innerHTML = blocksToHtml(mdToBlocks(m.content));
+  enhanceClientSummary(shell.bodyEl);
   if (m.content.includes('# CALIBIAI COMMERCIAL ESTIMATE')) {
     shell.head.querySelector('.pill-est').hidden = false;
     attachEstimateActions(shell, m.content, currentSessionId);
@@ -191,6 +192,83 @@ function createAiShell() {
   messagesEl.appendChild(wrap);
 
   return { wrap, head, bodyEl: body, actionsEl: actions };
+}
+
+
+/* ============================================================ client-facing summary
+   Section 18 is the block the BDO actually sends to the client, so on screen it is
+   lifted out of the plain markdown flow into its own "client-ready" card, and it can
+   be copied on its own in a clean, paste-ready form. */
+const CLIENT_SUMMARY_RE = /^\s*\d+\.\s*client[-\s]?facing summary\s*$/i;
+
+function enhanceClientSummary(bodyEl) {
+  if (!bodyEl) return;
+  const heads = Array.from(bodyEl.querySelectorAll('h2'));
+  const head = heads.find((h) => CLIENT_SUMMARY_RE.test(h.textContent || ''));
+  if (!head || head.dataset.enhanced === '1') return;
+
+  const card = document.createElement('section');
+  card.className = 'client-summary';
+  card.innerHTML =
+    '<header class="client-summary-head">' +
+    '<span class="client-summary-badge">CLIENT-READY</span>' +
+    '<h2>Client-Facing Summary</h2>' +
+    '<p class="client-summary-sub">Safe to send — no internal costs, margins or negotiation data.</p>' +
+    '</header>';
+  const body = document.createElement('div');
+  body.className = 'client-summary-body';
+  card.appendChild(body);
+
+  head.dataset.enhanced = '1';
+  bodyEl.insertBefore(card, head);
+
+  const moving = [];
+  let node = head.nextElementSibling;
+  while (node && !/^H[12]$/.test(node.tagName)) {
+    moving.push(node);
+    node = node.nextElementSibling;
+  }
+  head.remove();
+  moving.forEach((n) => body.appendChild(n));
+}
+
+// Extracts section 18 from the raw markdown estimate.
+function extractClientSummary(raw) {
+  const lines = String(raw || '').split('\n');
+  const start = lines.findIndex((l) => /^#{2,3}\s*\d+\.\s*client[-\s]?facing summary/i.test(l.trim()));
+  if (start < 0) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^#{1,2}\s+/.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start + 1, end).join('\n').trim() || null;
+}
+
+// Turns the summary markdown into clean text for email / WhatsApp:
+// tables become "Label: value" lines, bullets keep a simple dash, bold markers are dropped.
+function clientSummaryToPlainText(md) {
+  const out = [];
+  for (const rawLine of String(md).split('\n')) {
+    const line = rawLine.trim();
+    if (!line) { out.push(''); continue; }
+    if (/^\|[\s|:-]+\|?$/.test(line)) continue; // table separator
+    if (line.startsWith('|')) {
+      const cells = line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      if (/^item$/i.test(cells[0] || '')) continue; // table header
+      out.push(cells.length >= 2 ? `${cells[0]}: ${cells.slice(1).join(' ')}` : cells.join(' '));
+      continue;
+    }
+    if (/^#{1,6}\s+/.test(line)) { out.push(''); out.push(line.replace(/^#{1,6}\s+/, '').toUpperCase()); continue; }
+    if (/^[-*+]\s+/.test(line)) { out.push('- ' + line.replace(/^[-*+]\s+/, '')); continue; }
+    out.push(line);
+  }
+  return out
+    .join('\n')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /* ============================================================ streaming */
@@ -237,6 +315,7 @@ function finalizeStream(aborted = false) {
       aiShell.bodyEl.innerHTML =
         blocksToHtml(mdToBlocks(currentRaw)) +
         (lastErrorMsg ? errorBoxHtml() : '');
+      enhanceClientSummary(aiShell.bodyEl);
       const isEstimate = currentRaw.includes('# CALIBIAI COMMERCIAL ESTIMATE');
       if (isEstimate) {
         aiShell.head.querySelector('.pill-est').hidden = false;
@@ -422,6 +501,17 @@ function attachEstimateActions(shell, content, sessionId) {
 
   actionsEl.appendChild(internalBtn);
   actionsEl.appendChild(clientBtn);
+
+  const summaryMd = extractClientSummary(content);
+  if (summaryMd) {
+    const summaryBtn = mk(
+      'Copy Client Summary', 'soft',
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/></svg>',
+      () => copyText(clientSummaryToPlainText(summaryMd), 'Client summary copied — ready to paste into email or WhatsApp.')
+    );
+    actionsEl.appendChild(summaryBtn);
+  }
+
   actionsEl.appendChild(copyBtn);
 }
 
@@ -450,6 +540,21 @@ async function downloadPdf(mode, sessionId, btn) {
     toast(err.message, 'error', 6000);
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function copyText(text, message) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(message, 'success', 2800);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    toast(message, 'success', 2800);
   }
 }
 

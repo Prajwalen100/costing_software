@@ -207,7 +207,8 @@ function drawFooter(doc, pageNum, mode) {
   const fy = H - 34;
   doc.moveTo(ML, fy - 12).lineTo(W - MR, fy - 12).strokeColor(C.border).lineWidth(0.7).stroke();
   doc.font(FONT_REGULAR).fontSize(7.5).fillColor(C.muted);
-  doc.text('CalibiAI Pvt. Ltd. — AI Costing Agent', ML, fy - 7, { width: 200, lineBreak: false });
+  doc.text(mode === 'internal' ? 'CalibiAI Pvt. Ltd.' : 'CalibiAI Pvt. Ltd. — AI Costing Agent',
+    ML, fy - 7, { width: 150, lineBreak: false });
   doc.text(`Page ${pageNum}`, ML, fy - 7, { width: CW, align: 'right', lineBreak: false });
   if (mode === 'internal') {
     doc.font(FONT_BOLD).fontSize(7.5).fillColor(C.danger);
@@ -215,18 +216,33 @@ function drawFooter(doc, pageNum, mode) {
   }
 }
 
-// Client-facing PDF keeps only client-safe sections: 1, 2, 11, 12, 18
+// Client-facing PDF keeps only client-safe sections: 1, 2, 11, 12, 18.
+// Section headings are rewritten into client-friendly titles and renumbered
+// sequentially (1..5), so the client never sees gaps like "11." or "18."
+const CLIENT_SECTIONS = new Map([
+  [1, 'Project Overview'],
+  [2, 'Proposed Solution'],
+  [11, 'Delivery Timeline'],
+  [12, 'Payment Terms'],
+  [18, 'Proposal Summary'],
+]);
+
 export function filterClientBlocks(blocks) {
-  const wanted = new Set([1, 2, 11, 12, 18]);
   const out = [];
   let cur = null;
+  let n = 0;
   for (const b of blocks) {
     if (b.type === 'h' && b.level === 1) { cur = null; continue; }
-    if (b.type === 'h' && b.level >= 2 && b.level <= 3) {
-      const m = runsToText(b.runs).match(/^(\d+)\./);
+    if (b.type === 'h' && b.level === 2) {
+      const m = runsToText(b.runs).match(/^\s*(\d+)\./);
       cur = m ? Number(m[1]) : 99;
+      if (CLIENT_SECTIONS.has(cur)) {
+        n += 1;
+        out.push({ type: 'h', level: 2, runs: [{ t: 'text', v: `${n}. ${CLIENT_SECTIONS.get(cur)}` }] });
+      }
+      continue;
     }
-    if (cur !== null && wanted.has(cur)) out.push(b);
+    if (cur !== null && CLIENT_SECTIONS.has(cur)) out.push(b);
   }
   return out;
 }
@@ -275,7 +291,8 @@ function renderHeading(doc, b, ctx) {
   if (b.level === 1) return; // the cover band already carries the title
   if (b.level === 2) {
     const text = runsToText(b.runs);
-    ctx.ensureSpace(34);
+    // keep a heading with at least the first couple of lines of its section
+    ctx.ensureSpace(78);
     doc.rect(ML, ctx.y + 3, 3, 12).fill(C.primary);
     doc.font(FONT_BOLD).fontSize(12).fillColor(C.primaryDark);
     const lines = wrapLines(doc, text, CW - 12, 12);
@@ -287,41 +304,71 @@ function renderHeading(doc, b, ctx) {
     ctx.y += 9;
   } else {
     const text = runsToText(b.runs);
-    doc.font(FONT_BOLD).fontSize(10.5).fillColor(C.ink);
-    const lines = wrapLines(doc, text, CW, 10.5);
+    ctx.ensureSpace(62);
+    ctx.y += 4;
+    doc.font(FONT_BOLD).fontSize(10).fillColor(C.primary);
+    const lines = wrapLines(doc, text, CW, 10);
     lines.forEach((ln, i) => {
       if (i > 0) ctx.ensureSpace(15);
       doc.text(ln, ML, ctx.y, { lineBreak: false });
-      ctx.y += 13.5;
+      ctx.y += 13;
     });
-    ctx.y += 6;
+    ctx.y += 5;
   }
 }
 
 function renderPara(doc, b, ctx) {
-  const runs = (b.runs || []).map((r) => ({
-    ...r,
-    font: r.t === 'bold' ? FONT_BOLD : r.t === 'code' ? FONT_MONO : FONT_REGULAR,
-    col: r.t === 'code' ? '#3B2E6B' : C.ink,
-  }));
-  const words = [];
-  for (const r of runs) {
-    for (const w of r.v.split(/\s+/).filter(Boolean)) words.push({ w, font: r.font, col: r.col });
-  }
-  if (!words.length) { ctx.y += 6; return; }
-
-  const fontSize = 9.8;
+  if (!(b.runs || []).some((r) => String(r.v || '').trim())) { ctx.y += 6; return; }
   const lh = 14;
-  const gap = 2.5;
   ctx.ensureSpace(lh);
-  let x = ML;
-  let lineY = ctx.y;
+  drawRuns(doc, b.runs, ctx, { x: ML, width: CW, fontSize: 9.8, lh });
+  ctx.y += 6;
+}
 
+function renderList(doc, b, ctx) {
+  let n = 1;
+  for (const item of b.items) {
+    const marker = b.ordered ? `${n}.` : '•';
+    const markerW = b.ordered ? 16 : 12;
+    const bodyX = ML + markerW + 2;
+    const bodyW = CW - markerW - 2;
+    const fontSize = 9.8;
+    const lh = 14;
+
+    ctx.ensureSpace(lh + 2);
+    if (b.ordered) {
+      doc.font(FONT_BOLD).fontSize(fontSize).fillColor(C.primaryDark);
+      doc.text(marker, ML, ctx.y, { lineBreak: false });
+    } else {
+      doc.font(FONT_BOLD).fontSize(fontSize).fillColor(C.primary);
+      doc.text(marker, ML + 2, ctx.y, { lineBreak: false });
+    }
+    drawRuns(doc, item, ctx, { x: bodyX, width: bodyW, fontSize, lh });
+    ctx.y += 3.5;
+    n++;
+  }
+  ctx.y += 3;
+}
+
+// Draws inline runs (bold / italic / code) with word wrapping inside a column.
+// Advances ctx.y to just below the last line drawn.
+function drawRuns(doc, runs, ctx, { x: startX, width, fontSize, lh }) {
+  const words = [];
+  for (const r of runs || []) {
+    const font = r.t === 'bold' ? FONT_BOLD : r.t === 'code' ? FONT_MONO : FONT_REGULAR;
+    const col = r.t === 'code' ? '#3B2E6B' : r.t === 'bold' ? C.ink : C.ink;
+    for (const w of String(r.v ?? '').split(/\s+/).filter(Boolean)) words.push({ w, font, col });
+  }
+  if (!words.length) { ctx.y += lh; return; }
+
+  const gap = 2.5;
+  let x = startX;
+  let lineY = ctx.y;
   for (const word of words) {
     doc.font(word.font).fontSize(fontSize);
     const wW = doc.widthOfString(word.w) + gap;
-    if (x + wW > ML + CW && x > ML + 1) {
-      x = ML;
+    if (x + wW > startX + width && x > startX + 1) {
+      x = startX;
       lineY += lh;
       if (lineY + lh > H - MB_CONTENT) {
         ctx.y = lineY;
@@ -333,36 +380,7 @@ function renderPara(doc, b, ctx) {
     doc.text(word.w, x, lineY, { lineBreak: false });
     x += wW;
   }
-  ctx.y = lineY + lh + 6;
-}
-
-function renderList(doc, b, ctx) {
-  let n = 1;
-  for (const item of b.items) {
-    const text = runsToText(item);
-    const marker = b.ordered ? `${n}.` : '•';
-    const markerW = b.ordered ? 16 : 12;
-    const bodyX = ML + markerW + 2;
-    const lines = wrapLines(doc, text, CW - markerW - 2, 9.8);
-    lines.forEach((ln, i) => {
-      if (i > 0) ctx.ensureSpace(16);
-      if (i === 0) {
-        if (b.ordered) {
-          doc.font(FONT_BOLD).fontSize(9.8).fillColor(C.primaryDark);
-          doc.text(marker, ML, ctx.y, { lineBreak: false });
-        } else {
-          doc.font(FONT_BOLD).fontSize(9.8).fillColor(C.primary);
-          doc.text(marker, ML + 2, ctx.y, { lineBreak: false });
-        }
-      }
-      doc.font(FONT_REGULAR).fontSize(9.8).fillColor(C.ink);
-      doc.text(ln, bodyX, ctx.y, { lineBreak: false });
-      ctx.y += 14;
-    });
-    ctx.y += 3.5;
-    n++;
-  }
-  ctx.y += 3;
+  ctx.y = lineY + lh;
 }
 
 function renderTable(doc, b, ctx) {
@@ -371,17 +389,29 @@ function renderTable(doc, b, ctx) {
   const nCols = header.length;
   const all = [header, ...rows];
 
-  doc.font(FONT_REGULAR).fontSize(8.8);
   const pad = 6;
+  // header cells and (in key/value tables) the first column are drawn bold — measure them
+  // with the bold font, otherwise long labels get clipped instead of wrapped.
+  const cellFont = (rowIdx, c) => (rowIdx === 0 || (nCols === 2 && c === 0) ? FONT_BOLD : FONT_REGULAR);
   const natural = [];
   for (let c = 0; c < nCols; c++) {
     let w = 20;
-    for (const row of all) if (c < row.length) w = Math.max(w, doc.widthOfString(row[c] || ''));
+    all.forEach((row, ri) => {
+      if (c >= row.length) return;
+      doc.font(cellFont(ri, c)).fontSize(8.8);
+      w = Math.max(w, doc.widthOfString(row[c] || ''));
+    });
     natural.push(w + pad * 2);
   }
+  doc.font(FONT_REGULAR).fontSize(8.8);
   const total = natural.reduce((a, v) => a + v, 0);
   let widths;
-  if (total <= CW) {
+  if (nCols === 2) {
+    // key/value tables (Commercial Summary, Payment Terms...) read best with a
+    // narrow, fixed label column and the rest of the width given to the value.
+    const label = Math.min(Math.max(natural[0], CW * 0.26), CW * 0.36);
+    widths = [label, CW - label];
+  } else if (total <= CW) {
     const extra = (CW - total) / nCols;
     widths = natural.map((w) => w + extra);
   } else {
@@ -389,7 +419,10 @@ function renderTable(doc, b, ctx) {
     widths = natural.map((w) => Math.max(28, w * s));
   }
 
-  const cellLines = all.map((row) => row.map((cell, c) => wrapLines(doc, cell, widths[c] - 4, 8.8)));
+  const cellLines = all.map((row, ri) => row.map((cell, c) => {
+    doc.font(cellFont(ri, c));
+    return wrapLines(doc, cell, widths[c] - pad * 2, 8.8);
+  }));
   const lh = 10.6;
   const vpad = 5;
   const rowH = (linesArr) => Math.max(...linesArr.map((l) => l.length)) * lh + vpad * 2;
@@ -404,7 +437,10 @@ function renderTable(doc, b, ctx) {
         doc.fillColor(C.white).font(FONT_BOLD).fontSize(8.8);
       } else {
         doc.rect(x, ctx.y, widths[c], h).fill(rowIndex % 2 === 0 ? C.fillAlt : C.white);
-        doc.fillColor(C.ink).font(FONT_REGULAR).fontSize(8.8);
+        const labelCol = nCols === 2 && c === 0;
+        doc.fillColor(labelCol ? C.primaryDark : C.ink)
+          .font(labelCol ? FONT_BOLD : FONT_REGULAR)
+          .fontSize(8.8);
       }
       const lines = linesArr[c] || [' '];
       lines.forEach((ln, li) => {
