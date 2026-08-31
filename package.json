@@ -1,0 +1,19 @@
+{
+  "name": "calibiai-costing-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CalibiAI Costing Agent — internal pricing & proposal copilot for the CalibiAI BD team",
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.6",
+    "express": "^5.1.0",
+    "marked": "^15.0.12",
+    "pdfkit": "^0.17.2"
+  }
+}
