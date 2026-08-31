@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 355 121" width="355" height="121">
+  <!-- CalibiAI Costing Agent wordmark.
+       To use your own logo: replace public/logo.png with your logo file
+       (transparent background, roughly 500x140px, PNG recommended).
+       The same file is used by the chat UI AND the PDF generator. -->
+  <rect x="0" y="1" width="112" height="112" rx="26" fill="#6D28D9"/>
+  <text x="56" y="82" font-family="DejaVu Sans, Arial, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" text-anchor="middle">C</text>
+  <circle cx="102" cy="111" r="9" fill="#22D3EE"/>
+  <text x="158" y="66" font-family="DejaVu Sans, Arial, sans-serif" font-size="52" font-weight="700" fill="#171126">CalibiAI</text>
+  <text x="163" y="90" font-family="DejaVu Sans, Arial, sans-serif" font-size="15" font-weight="700" fill="#6D28D9" letter-spacing="2">AI COSTING AGENT</text>
+</svg>
