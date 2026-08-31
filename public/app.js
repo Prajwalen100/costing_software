@@ -42,6 +42,10 @@ let currentRaw = '';
 let flushTimer = null;
 let aiShell = null; // { bodyEl, actionsEl }
 let isDemo = false;
+let streamFailed = false; // the current/last stream ended in an error
+let lastErrorMsg = null; // last error text, rendered inside the AI bubble
+let lastRequestPayload = null; // { message, sessionId, history } — reused by Retry
+let failedShell = null; // failed AI bubble kept alive so its Retry button still works
 
 /* ============================================================ helpers */
 function loadChats() {
@@ -52,6 +56,17 @@ function saveChats() {
 }
 function nowTime() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function errorBoxHtml() {
+  const msg = escapeHtml(lastErrorMsg || 'Estimation failed. Please try again.');
+  return `<div class="stream-error"><span class="stream-error-icon">⚠</span><span class="stream-error-text">${msg}</span><button type="button" class="retry-btn" data-retry>↻ Retry</button></div>`;
 }
 
 function toast(msg, type = 'info', ms = 4200) {
@@ -93,6 +108,8 @@ function newConversation() {
   sessionMessages = [];
   activeChatId = null;
   currentSessionId = null;
+  failedShell = null;
+  lastRequestPayload = null;
   messagesEl.querySelectorAll('.msg').forEach((m) => m.remove());
   emptyState.hidden = false;
   inputEl.focus();
@@ -104,6 +121,8 @@ function openChat(c) {
   sessionMessages = (c.messages || []).map((m) => ({ ...m }));
   activeChatId = c.id;
   currentSessionId = c.sessionId || null;
+  failedShell = null;
+  lastRequestPayload = null;
   messagesEl.querySelectorAll('.msg').forEach((m) => m.remove());
   emptyState.hidden = sessionMessages.length > 0;
   sessionMessages.forEach((m) => renderMessage(m, { animate: false }));
@@ -185,8 +204,18 @@ function scheduleFlush() {
 
 function flush() {
   if (!aiShell) return;
-  const html = blocksToHtml(mdToBlocks(currentRaw));
-  aiShell.bodyEl.innerHTML = html + '<span class="cursor"></span>';
+  aiShell.bodyEl.innerHTML =
+    blocksToHtml(mdToBlocks(currentRaw)) +
+    (lastErrorMsg ? errorBoxHtml() : '') +
+    '<span class="cursor"></span>';
+  scrollBottom();
+}
+
+function renderStreamError(msg) {
+  lastErrorMsg = msg;
+  if (!aiShell) return;
+  aiShell.bodyEl.innerHTML =
+    blocksToHtml(mdToBlocks(currentRaw)) + errorBoxHtml() + '<span class="cursor"></span>';
   scrollBottom();
 }
 
@@ -198,28 +227,42 @@ function finalizeStream(aborted = false) {
   sendBtn.hidden = false;
 
   if (aiShell) {
-    if (aborted && !currentRaw.trim()) {
+    if (streamFailed && !currentRaw.trim()) {
+      aiShell.bodyEl.innerHTML = lastErrorMsg
+        ? errorBoxHtml()
+        : '<p class="streaming-note">Generation failed.</p>';
+    } else if (aborted && !currentRaw.trim()) {
       aiShell.bodyEl.innerHTML = '<p class="streaming-note">Generation stopped.</p>';
     } else if (currentRaw.trim()) {
-      aiShell.bodyEl.innerHTML = blocksToHtml(mdToBlocks(currentRaw));
+      aiShell.bodyEl.innerHTML =
+        blocksToHtml(mdToBlocks(currentRaw)) +
+        (lastErrorMsg ? errorBoxHtml() : '');
       const isEstimate = currentRaw.includes('# CALIBIAI COMMERCIAL ESTIMATE');
       if (isEstimate) {
         aiShell.head.querySelector('.pill-est').hidden = false;
         attachEstimateActions(aiShell, currentRaw.trim(), currentSessionId);
       }
-      sessionMessages.push({ role: 'assistant', content: currentRaw.trim() });
-      if (activeChatId) {
-        const chat = chats.find((c) => c.id === activeChatId);
-        if (chat) {
-          chat.sessionId = currentSessionId;
-          chat.messages = aiShellHistorySnapshot();
-          if (!chat.title) chat.title = sessionMessages.find((m) => m.role === 'user')?.content?.slice(0, 52) || 'Untitled';
-          chat.updatedAt = Date.now();
-          saveChats();
-          renderHistory();
-        }
+      // A failed stream is not real conversation content — don't save it
+      // as an assistant reply, only keep whatever partial text is on screen.
+      if (!streamFailed) {
+        sessionMessages.push({ role: 'assistant', content: currentRaw.trim() });
       }
     }
+    // Persist the conversation either way (on failure this keeps the user's
+    // message in the sidebar history without the broken assistant reply).
+    if (activeChatId) {
+      const chat = chats.find((c) => c.id === activeChatId);
+      if (chat) {
+        chat.sessionId = currentSessionId;
+        chat.messages = aiShellHistorySnapshot();
+        if (!chat.title) chat.title = sessionMessages.find((m) => m.role === 'user')?.content?.slice(0, 52) || 'Untitled';
+        chat.updatedAt = Date.now();
+        saveChats();
+        renderHistory();
+      }
+    }
+    // Keep a failed bubble alive so its Retry button keeps working after finalize.
+    failedShell = streamFailed ? aiShell : null;
     aiShell = null;
   }
   currentRaw = '';
@@ -228,6 +271,11 @@ function finalizeStream(aborted = false) {
 function stopStreaming() {
   if (currentAbort) { try { currentAbort.abort(); } catch {} }
   finalizeStream(true);
+}
+
+function retryLastStream() {
+  if (streaming || !lastRequestPayload) return;
+  runStream(true);
 }
 
 async function sendMessage(text) {
@@ -240,27 +288,46 @@ async function sendMessage(text) {
   inputEl.value = '';
   autoResize();
 
+  lastRequestPayload = {
+    message: text,
+    sessionId: currentSessionId,
+    history: sessionMessages.slice(0, -1),
+  };
+  await runStream(false);
+}
+
+async function runStream(isRetry = false) {
+  if (!lastRequestPayload) return;
+
   streaming = true;
+  streamFailed = false;
+  lastErrorMsg = null;
   currentRaw = '';
   currentAbort = new AbortController();
+
+  if (isRetry && failedShell) {
+    aiShell = failedShell;
+    failedShell = null;
+  } else {
+    const shell = createAiShell();
+    aiShell = shell;
+  }
+  aiShell.head.querySelector('.pill-est').hidden = true;
+  aiShell.actionsEl.hidden = true;
+  aiShell.actionsEl.innerHTML = '';
+  aiShell.bodyEl.innerHTML = '<span class="cursor"></span>';
+
   sendBtn.hidden = true;
   stopBtn.hidden = false;
-  const shell = createAiShell();
-  aiShell = shell;
-  shell.bodyEl.innerHTML = '<span class="cursor"></span>';
   scrollBottom(true);
 
-  const historyForServer = sessionMessages.slice(0, -1);
+  const payload = { ...lastRequestPayload, retry: isRetry };
 
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: text,
-        sessionId: currentSessionId,
-        history: historyForServer,
-      }),
+      body: JSON.stringify(payload),
       signal: currentAbort.signal,
     });
 
@@ -287,6 +354,7 @@ async function sendMessage(text) {
 
         if (ev.t === 'start') {
           currentSessionId = ev.sessionId;
+          lastRequestPayload.sessionId = ev.sessionId;
           if (activeChatId) {
             const chat = chats.find((c) => c.id === activeChatId);
             if (chat) chat.sessionId = ev.sessionId;
@@ -298,8 +366,8 @@ async function sendMessage(text) {
           currentRaw += ev.v;
           scheduleFlush();
         } else if (ev.t === 'error') {
-          currentRaw += `\n\n> ⚠ ${ev.message}\n`;
-          scheduleFlush();
+          streamFailed = true;
+          renderStreamError(ev.message);
           toast(ev.message, 'error', 7000);
         } else if (ev.t === 'done') {
           // done — fallthrough to finalize
@@ -308,10 +376,13 @@ async function sendMessage(text) {
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
-      toast('Connection error: ' + err.message, 'error', 7000);
-      if (aiShell && !currentRaw.trim()) {
-        aiShell.bodyEl.innerHTML = '<p class="streaming-note">⚠ Could not reach the estimation service. Please check that the server is running and try again.</p>';
-      }
+      streamFailed = true;
+      const isNetwork = /^Failed to fetch$|^NetworkError/i.test(err.message || '');
+      const msg = isNetwork
+        ? 'Could not reach the estimation service. Please check that the server is running and try again.'
+        : err.message;
+      renderStreamError(msg);
+      toast(msg, 'error', 7000);
     }
   } finally {
     finalizeStream(false);
@@ -413,6 +484,11 @@ inputEl.addEventListener('keydown', (e) => {
 sendBtn.addEventListener('click', () => sendMessage(inputEl.value));
 stopBtn.addEventListener('click', stopStreaming);
 newChatBtn.addEventListener('click', newConversation);
+
+// Retry buttons live inside re-rendered AI bubbles — delegate the click.
+messagesEl.addEventListener('click', (e) => {
+  if (e.target.closest('[data-retry]')) retryLastStream();
+});
 
 document.querySelectorAll('.chip').forEach((chip) => {
   chip.addEventListener('click', () => {

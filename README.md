@@ -47,6 +47,7 @@ Without a key the app runs in **demo mode** and streams a canned example estimat
 | `DEEPSEEK_MODEL` | `deepseek-chat` | Model used for estimates |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | API base URL |
 | `PORT` | `3000` | Server port |
+| `UPSTREAM_TIMEOUT_MS` | `300000` (5 min) | Hard cap on waiting for the DeepSeek response |
 
 ---
 
@@ -58,6 +59,7 @@ Without a key the app runs in **demo mode** and streams a canned example estimat
 - **Sample prompts** — one-click example requirements (chatbot, automation, training, outsourcing)
 - **Estimate action bar** — appears automatically when an estimate is ready: Internal PDF, Client PDF, Copy
 - **Stop generation** — abort a stream mid-response
+- **Resilient streaming** — the DeepSeek request is never aborted by socket hiccups; heartbeats keep proxies from dropping idle connections, a hard timeout caps runaway requests, and failed generations show an inline **Retry** button
 - **Demo mode banner** — clearly shows when no API key is configured
 - **Auto-detected client name + estimate reference** (`CST-YYYYMMDD-XXXX`) on every PDF
 
@@ -87,7 +89,7 @@ costing_software/
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/chat` | POST | SSE stream. Body: `{ message, sessionId?, history? }`. Events: `start`, `notice`, `token`, `error`, `done` |
+| `/api/chat` | POST | SSE stream. Body: `{ message, sessionId?, history?, retry? }`. Events: `start`, `notice`, `token`, `error`, `done`. Pass `retry: true` when re-sending the immediately-preceding message — the server won't duplicate it in history. |
 | `/api/pdf/internal?session=<id>` | GET | Full internal estimate PDF (confidential) |
 | `/api/pdf/client?session=<id>` | GET | Client-facing quotation PDF (internal data stripped) |
 | `/api/status` | GET | `{ demo: true/false, model }` |
@@ -104,5 +106,6 @@ Sessions live in memory for 12 hours.
 ## Notes
 
 - Requires Node.js ≥ 18 (uses global `fetch`).
+- Streaming is deliberately resilient: if the browser disconnects mid-estimate (network blip, proxy timeout, tab close), the server finishes the generation in the background and saves the estimate to the session instead of failing it — this is what previously surfaced as `Estimation failed: This operation was aborted`. Clicking **Retry** re-runs the same request without duplicating the message.
 - The PDF generator embeds the DejaVu fonts (found on most Linux systems) so the ₹ symbol renders correctly. If they are missing it falls back to pdfkit's built-in Unicode fonts (so PDFs never fail to generate); to get the ₹ glyph on non-Linux hosts, drop the TTFs into `assets/fonts/`.
 - Internal economics, floor price and negotiation guidance are **never** included in the client-facing PDF.
