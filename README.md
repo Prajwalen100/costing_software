@@ -52,7 +52,7 @@ Without a key the app runs in **demo mode** and streams a canned example estimat
 
 ## Features
 
-- **Streaming chat UI** — dark, branded, responsive; responses type out in real time
+- **Streaming chat UI** — branded, responsive; white (light) theme by default with a light/dark toggle; responses type out in real time
 - **Markdown rendering** — headings, tables, lists, bold, inline code
 - **Chat history** — recent conversations saved in the browser (localStorage)
 - **Sample prompts** — one-click example requirements (chatbot, automation, training, outsourcing)
@@ -75,7 +75,7 @@ costing_software/
 │                          #   (screen and PDF always render the same content)
 ├── public/
 │   ├── index.html         # Chat UI
-│   ├── style.css          # Dark violet theme
+│   ├── style.css          # White theme (default) + dark violet theme toggle
 │   ├── app.js             # Client logic: SSE streaming, history, PDF downloads
 │   ├── logo.png           # CalibiAI logo (used by web UI AND PDFs)
 │   └── logo.svg           # Editable logo source
@@ -104,5 +104,5 @@ Sessions live in memory for 12 hours.
 ## Notes
 
 - Requires Node.js ≥ 18 (uses global `fetch`).
-- The PDF generator embeds the DejaVu fonts (found on most Linux systems) so the ₹ symbol renders correctly. On systems without them, drop the TTFs into `assets/fonts/`.
+- The PDF generator embeds the DejaVu fonts (found on most Linux systems) so the ₹ symbol renders correctly. If they are missing it falls back to pdfkit's built-in Unicode fonts (so PDFs never fail to generate); to get the ₹ glyph on non-Linux hosts, drop the TTFs into `assets/fonts/`.
 - Internal economics, floor price and negotiation guidance are **never** included in the client-facing PDF.

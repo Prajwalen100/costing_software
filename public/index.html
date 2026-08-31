@@ -10,6 +10,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
+  <script>
+    // Apply the saved theme before first paint to avoid a flash of the wrong theme.
+    (function () {
+      try {
+        var saved = localStorage.getItem('calibiai_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', saved === 'dark' ? 'dark' : 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
@@ -34,13 +45,17 @@
     <main class="chat">
       <header class="topbar">
         <div class="topbar-left">
-          <div class="avatar">C</div>
+          <img src="/logo.png" alt="CalibiAI" class="avatar" />
           <div>
             <div class="agent-name">CalibiAI Costing Agent <span class="badge-live">DeepSeek · streaming</span></div>
             <div class="agent-sub" id="agentSub">Commercial estimation copilot for the BD team</div>
           </div>
         </div>
         <div class="topbar-right">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle light / dark theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
           <span class="demo-chip" id="demoChip" hidden>⚠ Demo mode — add DEEPSEEK_API_KEY in .env</span>
         </div>
       </header>
