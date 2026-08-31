@@ -120,5 +120,31 @@ Quote ₹2,85,000 (one-time development) + third-party usage costs billed at act
 Scope reductions if the client has a lower budget: drop WhatsApp (website-only Basic at ₹1,90,000); remove Zoho CRM push and use CSV/email lead delivery; reduce the knowledge base to 20 documents; or offer a ₹75,000 paid POC first with the fee adjustable against production. Discounts above 5% need sales/founder approval and should come with a scope reduction.
 
 ## 18. Client-Facing Summary
-We propose an **AI Lead Qualification & Customer Engagement System** for your business — a single AI assistant on your website and WhatsApp that answers customer questions instantly from your product documents, collects visitor details, qualifies every lead automatically and delivers scored leads directly into your Zoho CRM with full conversation notes. The system is delivered in 4–5 weeks for **₹2,85,000**, payable as 40% advance, 30% at core build, 20% at UAT sign-off and 10% at go-live. Usage-based third-party costs (WhatsApp conversation fees, AI usage and hosting — typically ₹4,000–₹9,500/month combined) are billed separately at actuals. We also offer an ongoing care plan covering monitoring, prompt optimization, monthly knowledge updates and priority support at ₹60,000/month. This is a direct revenue system for your team — every visitor becomes a captured, qualified lead without any manual data entry.
+We propose an **AI Lead Qualification & Customer Engagement System** for your business. One AI assistant works across your website and WhatsApp, answers customer questions instantly from your own product documents, and hands your sales team clean, qualified leads inside Zoho CRM. The result is faster responses, zero missed enquiries and no manual data entry.
+
+### What You Get
+- **AI Assistant (Website + WhatsApp):** instant, accurate answers for every customer, 24×7.
+- **Knowledge Base from Your Documents:** up to 50 PDFs, with two refresh cycles included.
+- **Automatic Lead Qualification:** every visitor is captured, scored and summarised.
+- **Zoho CRM Integration:** qualified leads created automatically with conversation notes.
+- **Admin Dashboard:** conversation history, lead review and one-click export.
+- **Go-Live Support:** testing, UAT assistance, deployment and handover documentation.
+
+### Commercial Summary
+| Item | Details |
+|---|---|
+| Solution | AI Lead Qualification & Customer Engagement System |
+| Investment | ₹2,85,000 (one-time development fee) |
+| Delivery Timeline | 4–5 weeks from kick-off |
+| Payment Schedule | 40% advance ₹1,14,000 · 30% core build ₹85,500 · 20% UAT sign-off ₹57,000 · 10% go-live ₹28,500 |
+| Support & Maintenance | CalibiAI AI Care & Optimization — ₹60,000/month (optional) |
+| Third-Party Costs | ₹4,000–₹9,500/month (WhatsApp, AI usage, hosting) — billed at actuals |
+| Quotation Validity | 30 days from the date of this proposal |
+
+### Next Steps
+1. Confirm the recommended package and share your product documents.
+2. Provide WhatsApp Business and Zoho CRM access for integration.
+3. Kick-off call within 3 working days of confirmation.
+
+We would be glad to walk you through the solution in a short call whenever convenient.
 `;

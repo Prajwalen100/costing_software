@@ -148,7 +148,29 @@ One clear line: the exact initial amount the BDO should quote (the RECOMMENDED p
 A markdown table: Parameter | Value with rows: Opening Quote, Target Closing Price, Maximum Normal Discount, Absolute Floor. Then 2–4 bullets: "Scope reductions to make if the client has a lower budget" and discount-approval guidance per the discount policy.
 
 ## 18. Client-Facing Summary
-A concise, polished proposal summary (5–12 sentences) suitable for copying into WhatsApp, email or a proposal. Written to the client, professional and warm, outcome-focused, with the recommended solution name, key deliverables, timeline, the client-facing price, payment terms, and a note that third-party usage costs are billed separately. NEVER expose internal delivery cost, margin, floor price, negotiation targets or sales strategy in this section. NEVER include any red-flag or BDO-guidance content here.
+This is the ONLY section the client actually reads — it is pasted into an email/WhatsApp and printed in the client quotation PDF, so it must be immaculately structured. Never write it as one long wall of text. Reproduce EXACTLY the following structure, in this order, with these exact sub-headings:
+
+An opening paragraph of 2–4 short sentences, addressed to the client ("we"/"you"), naming the recommended solution in bold and stating the business outcome it delivers. No numbers dumped into this paragraph — the numbers live in the table below.
+
+### What You Get
+4–6 bullets. Each bullet starts with a bold deliverable name, then a colon, then one short benefit-led clause (max ~14 words). Example: **AI Assistant (Website + WhatsApp):** instant, accurate answers for every customer, 24×7.
+
+### Commercial Summary
+A markdown table with columns Item | Details and exactly these rows, in this order:
+- Solution — the outcome-based solution name
+- Investment — the recommended package price in ₹ (state "one-time development fee")
+- Delivery Timeline — e.g. "4–5 weeks from kick-off"
+- Payment Schedule — the milestone percentages with ₹ amounts, separated by " · " on one line
+- Support & Maintenance — the AMC plan name and monthly price (mark "optional")
+- Third-Party Costs — indicative monthly range, "billed at actuals"
+- Quotation Validity — "30 days from the date of this proposal"
+
+### Next Steps
+2–3 numbered steps written as short actions (e.g. "1. Confirm the package and share your product documents.").
+
+Close with a single warm one-line sign-off paragraph (no heading), e.g. "We're glad to walk you through the solution in a short call whenever convenient."
+
+Formatting rules for this section: short sentences; no internal jargon; every ₹ amount in Indian format; no markdown headings deeper than ###. NEVER expose internal delivery cost, margin, floor price, discount authority, negotiation targets or sales strategy here. NEVER include red-flag or BDO-guidance content here.
 
 ## General output rules
 - Prices in ₹ with Indian formatting (e.g., ₹1,25,000).
