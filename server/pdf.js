@@ -12,15 +12,27 @@ function findFontFile(name) {
   const candidates = [
     path.join('/usr/share/fonts/truetype/dejavu', name),
     path.join('/usr/share/fonts', name),
+    path.join('/usr/local/share/fonts', name),
+    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'Windows', 'Fonts', name),
+    path.join(process.env.WINDIR || '', 'Fonts', name),
+    path.join('/Library/Fonts', name),
+    path.join('/System/Library/Fonts', name),
     path.join(ROOT, 'assets', 'fonts', name),
   ];
-  for (const p of candidates) if (fs.existsSync(p)) return p;
+  for (const p of candidates) if (p && fs.existsSync(p)) return p;
   return null;
 }
 
 const SANS = findFontFile('DejaVuSans.ttf');
 const SANS_BOLD = findFontFile('DejaVuSans-Bold.ttf');
 const MONO = findFontFile('DejaVuSansMono.ttf');
+
+// Font names used by the document. If the DejaVu TTFs are not installed on the
+// host (common on Windows/macOS), fall back to pdfkit's always-available
+// built-in fonts so PDF generation never crashes with an "ENOENT" font error.
+const FONT_REGULAR = SANS ? 'Sans' : 'Helvetica';
+const FONT_BOLD = SANS_BOLD ? 'SansB' : 'Helvetica-Bold';
+const FONT_MONO = MONO ? 'Mono' : 'Courier';
 
 let LOGO = null;
 try {
@@ -75,7 +87,7 @@ export function blocksToPdf(blocks, { mode = 'internal', meta = {} } = {}) {
     if (SANS) doc.registerFont('Sans', SANS);
     if (SANS_BOLD) doc.registerFont('SansB', SANS_BOLD);
     if (MONO) doc.registerFont('Mono', MONO);
-    doc.font('Sans').fontSize(10).fillColor(C.ink);
+    doc.font(FONT_REGULAR).fontSize(10).fillColor(C.ink);
 
     // ------------------------------------------------------------ state
     let pageNum = 1;
@@ -88,7 +100,7 @@ export function blocksToPdf(blocks, { mode = 'internal', meta = {} } = {}) {
           pageNum += 1;
           this.y = MT;
           // slim continuation header
-          doc.font('Sans').fontSize(7.5).fillColor(C.muted);
+          doc.font(FONT_REGULAR).fontSize(7.5).fillColor(C.muted);
           doc.text(
             mode === 'internal' ? 'CalibiAI — Internal Commercial Estimate (continued)' : 'CalibiAI — Proposal & Quotation (continued)',
             ML, 24, { width: CW, align: 'right', lineBreak: false }
@@ -115,10 +127,10 @@ export function blocksToPdf(blocks, { mode = 'internal', meta = {} } = {}) {
       ctx.y += 8;
       doc.moveTo(ML, ctx.y).lineTo(W - MR, ctx.y).strokeColor(C.border).lineWidth(0.8).stroke();
       ctx.y += 16;
-      doc.font('SansB').fontSize(10).fillColor(C.primaryDark);
+      doc.font(FONT_BOLD).fontSize(10).fillColor(C.primaryDark);
       doc.text('Prepared by CalibiAI Pvt. Ltd. — AI Costing Agent', ML, ctx.y, { lineBreak: false });
       ctx.y += 14;
-      doc.font('Sans').fontSize(8.5).fillColor(C.slate);
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor(C.slate);
       doc.text(
         'This quotation is indicative and valid for 30 days from the date above. Third-party and usage-based charges are billed separately at actuals.',
         ML, ctx.y, { width: CW, lineGap: 2, lineBreak: false }
@@ -136,22 +148,22 @@ function drawCoverHeader(doc, meta, mode, ctx) {
   if (LOGO) {
     doc.image(LOGO, ML, MT - 10, { height: 40 });
   } else {
-    doc.font('SansB').fontSize(20).fillColor(C.primary);
+    doc.font(FONT_BOLD).fontSize(20).fillColor(C.primary);
     doc.text('CalibiAI', ML, MT - 4, { lineBreak: false });
-    doc.font('Sans').fontSize(8).fillColor(C.muted);
+    doc.font(FONT_REGULAR).fontSize(8).fillColor(C.muted);
     doc.text('AI COSTING AGENT', ML, MT + 20, { lineBreak: false });
   }
   ctx.y = MT + 44;
 
   // title band
   doc.roundedRect(ML, ctx.y, CW, 30, 6).fill(mode === 'client' ? C.primary : C.primaryDark);
-  doc.fillColor(C.white).font('SansB').fontSize(13);
+  doc.fillColor(C.white).font(FONT_BOLD).fontSize(13);
   doc.text(
     mode === 'client' ? 'PROPOSAL & COMMERCIAL QUOTATION' : 'CALIBIAI COMMERCIAL ESTIMATE',
     ML + 12, ctx.y + 9, { width: CW - 24, lineBreak: false }
   );
   if (mode === 'internal') {
-    doc.font('SansB').fontSize(8).fillColor('#FCA5A5');
+    doc.font(FONT_BOLD).fontSize(8).fillColor('#FCA5A5');
     doc.text('INTERNAL ONLY — CONFIDENTIAL', ML, ctx.y + 11, { width: CW - 24, align: 'right', lineBreak: false });
   }
   ctx.y += 42;
@@ -169,9 +181,9 @@ function drawCoverHeader(doc, meta, mode, ctx) {
   for (const [label, value] of rows) {
     const x = colX[row % 2];
     const y = ctx.y + Math.floor(row / 2) * 34;
-    doc.font('SansB').fontSize(7).fillColor(C.muted);
+    doc.font(FONT_BOLD).fontSize(7).fillColor(C.muted);
     doc.text(label.toUpperCase(), x, y, { width: 240, lineBreak: false });
-    doc.font('Sans').fontSize(9.5).fillColor(C.ink);
+    doc.font(FONT_REGULAR).fontSize(9.5).fillColor(C.ink);
     doc.text(String(value), x, y + 10, { width: 240, lineBreak: false });
     row++;
   }
@@ -186,7 +198,7 @@ function drawWatermark(doc, mode) {
   doc.save();
   doc.translate(W / 2 - 150, H / 2);
   doc.rotate(28);
-  doc.font('SansB').fontSize(30).fillColor(C.danger).fillOpacity(0.05);
+  doc.font(FONT_BOLD).fontSize(30).fillColor(C.danger).fillOpacity(0.05);
   doc.text('INTERNAL — NOT FOR CLIENT DISTRIBUTION', 0, 0, { lineBreak: false });
   doc.restore();
 }
@@ -194,11 +206,11 @@ function drawWatermark(doc, mode) {
 function drawFooter(doc, pageNum, mode) {
   const fy = H - 34;
   doc.moveTo(ML, fy - 12).lineTo(W - MR, fy - 12).strokeColor(C.border).lineWidth(0.7).stroke();
-  doc.font('Sans').fontSize(7.5).fillColor(C.muted);
+  doc.font(FONT_REGULAR).fontSize(7.5).fillColor(C.muted);
   doc.text('CalibiAI Pvt. Ltd. — AI Costing Agent', ML, fy - 7, { width: 200, lineBreak: false });
   doc.text(`Page ${pageNum}`, ML, fy - 7, { width: CW, align: 'right', lineBreak: false });
   if (mode === 'internal') {
-    doc.font('SansB').fontSize(7.5).fillColor(C.danger);
+    doc.font(FONT_BOLD).fontSize(7.5).fillColor(C.danger);
     doc.text('INTERNAL & CONFIDENTIAL — DO NOT SHARE WITH CLIENT', ML, fy - 7, { width: CW, align: 'center', lineBreak: false });
   }
 }
@@ -265,7 +277,7 @@ function renderHeading(doc, b, ctx) {
     const text = runsToText(b.runs);
     ctx.ensureSpace(34);
     doc.rect(ML, ctx.y + 3, 3, 12).fill(C.primary);
-    doc.font('SansB').fontSize(12).fillColor(C.primaryDark);
+    doc.font(FONT_BOLD).fontSize(12).fillColor(C.primaryDark);
     const lines = wrapLines(doc, text, CW - 12, 12);
     lines.forEach((ln, i) => {
       if (i > 0) ctx.ensureSpace(18);
@@ -275,7 +287,7 @@ function renderHeading(doc, b, ctx) {
     ctx.y += 9;
   } else {
     const text = runsToText(b.runs);
-    doc.font('SansB').fontSize(10.5).fillColor(C.ink);
+    doc.font(FONT_BOLD).fontSize(10.5).fillColor(C.ink);
     const lines = wrapLines(doc, text, CW, 10.5);
     lines.forEach((ln, i) => {
       if (i > 0) ctx.ensureSpace(15);
@@ -289,7 +301,7 @@ function renderHeading(doc, b, ctx) {
 function renderPara(doc, b, ctx) {
   const runs = (b.runs || []).map((r) => ({
     ...r,
-    font: r.t === 'bold' ? 'SansB' : r.t === 'code' ? 'Mono' : 'Sans',
+    font: r.t === 'bold' ? FONT_BOLD : r.t === 'code' ? FONT_MONO : FONT_REGULAR,
     col: r.t === 'code' ? '#3B2E6B' : C.ink,
   }));
   const words = [];
@@ -336,14 +348,14 @@ function renderList(doc, b, ctx) {
       if (i > 0) ctx.ensureSpace(16);
       if (i === 0) {
         if (b.ordered) {
-          doc.font('SansB').fontSize(9.8).fillColor(C.primaryDark);
+          doc.font(FONT_BOLD).fontSize(9.8).fillColor(C.primaryDark);
           doc.text(marker, ML, ctx.y, { lineBreak: false });
         } else {
-          doc.font('SansB').fontSize(9.8).fillColor(C.primary);
+          doc.font(FONT_BOLD).fontSize(9.8).fillColor(C.primary);
           doc.text(marker, ML + 2, ctx.y, { lineBreak: false });
         }
       }
-      doc.font('Sans').fontSize(9.8).fillColor(C.ink);
+      doc.font(FONT_REGULAR).fontSize(9.8).fillColor(C.ink);
       doc.text(ln, bodyX, ctx.y, { lineBreak: false });
       ctx.y += 14;
     });
@@ -359,7 +371,7 @@ function renderTable(doc, b, ctx) {
   const nCols = header.length;
   const all = [header, ...rows];
 
-  doc.font('Sans').fontSize(8.8);
+  doc.font(FONT_REGULAR).fontSize(8.8);
   const pad = 6;
   const natural = [];
   for (let c = 0; c < nCols; c++) {
@@ -389,10 +401,10 @@ function renderTable(doc, b, ctx) {
     for (let c = 0; c < nCols; c++) {
       if (isHeader) {
         doc.rect(x, ctx.y, widths[c], h).fill(C.primary);
-        doc.fillColor(C.white).font('SansB').fontSize(8.8);
+        doc.fillColor(C.white).font(FONT_BOLD).fontSize(8.8);
       } else {
         doc.rect(x, ctx.y, widths[c], h).fill(rowIndex % 2 === 0 ? C.fillAlt : C.white);
-        doc.fillColor(C.ink).font('Sans').fontSize(8.8);
+        doc.fillColor(C.ink).font(FONT_REGULAR).fontSize(8.8);
       }
       const lines = linesArr[c] || [' '];
       lines.forEach((ln, li) => {

@@ -185,7 +185,10 @@ app.post('/api/chat', async (req, res) => {
     } else {
       const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...session.history.slice(-14)];
       const ac = new AbortController();
-      req.on('close', () => ac.abort());
+      // Use the RESPONSE stream's close event to detect a real client disconnect.
+      // `req.on('close')` fires as soon as the POST body has been parsed (in live mode
+      // that aborts the DeepSeek request immediately → "This operation was aborted").
+      res.on('close', () => ac.abort());
       await streamDeepSeek(
         messages,
         (tok) => {
