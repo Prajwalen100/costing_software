@@ -26,6 +26,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const DEEPSEEK_API_KEY = (process.env.DEEPSEEK_API_KEY || '').trim();
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const UPSTREAM_TIMEOUT_MS = Math.max(1000, Number(process.env.UPSTREAM_TIMEOUT_MS) || 5 * 60 * 1000);
+const HEARTBEAT_MS = Math.max(500, Number(process.env.HEARTBEAT_MS) || 15000);
 const DEMO = !DEEPSEEK_API_KEY;
 
 if (DEMO) {
@@ -83,7 +85,24 @@ function detectClientName(userTexts) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const sse = (res, obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
+// Translate upstream/transport failures into a short, actionable message for the UI.
+function friendlyUpstreamError(err) {
+  if (err?.name === 'TimeoutError') {
+    return `The AI service took too long to respond (timeout after ${Math.round(UPSTREAM_TIMEOUT_MS / 1000)}s). Please retry.`;
+  }
+  if (err?.name === 'AbortError') {
+    return 'The request was cancelled before the AI service finished. Please retry.';
+  }
+  if (err instanceof TypeError && /terminated|premature close/i.test(err.message || '')) {
+    return 'The AI service connection was interrupted mid-response. Please retry.';
+  }
+  const cause = err?.cause?.code;
+  if (cause && ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'].includes(cause)) {
+    return `Could not reach the DeepSeek API (${cause}). Check your internet connection and DEEPSEEK_BASE_URL, then retry.`;
+  }
+  return err?.message ? `Estimation failed: ${String(err.message).slice(0, 300)}. Please try again.` : 'Estimation failed. Please try again.';
+}
 
 async function streamDeepSeek(messages, onToken, signal) {
   const res = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
@@ -135,7 +154,7 @@ app.get('/api/status', (req, res) => {
 
 // ---------------------------------------------------------------- API: chat (SSE streaming)
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId, history } = req.body || {};
+  const { message, sessionId, history, retry } = req.body || {};
   const text = String(message || '').trim();
   if (!text) return res.status(400).json({ error: 'Message is required.' });
 
@@ -151,13 +170,47 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
+  // A retry of the immediately-preceding message must not duplicate it in history.
+  const lastH = session.history[session.history.length - 1];
+  const duplicateRetry = !!retry && lastH?.role === 'user' && lastH.content === text;
+
   const userTexts = [...session.history.filter((h) => h.role === 'user').map((h) => h.content), text];
   const client = detectClientName(userTexts);
   if (client) session.clientName = client;
   if (!session.title) session.title = deriveTitle(text);
 
-  session.history.push({ role: 'user', content: text });
-  session.updatedAt = Date.now();
+  if (!duplicateRetry) {
+    session.history.push({ role: 'user', content: text });
+    session.updatedAt = Date.now();
+  }
+
+  // --- SSE plumbing ---------------------------------------------------
+  // IMPORTANT: we deliberately do NOT abort the upstream LLM request when the
+  // client disconnects. The socket 'close' event fires for many reasons that
+  // have nothing to do with the user (intermediate proxies timing out an idle
+  // connection, keep-alive races, tab switches, browser quirks — and on some
+  // Node versions it even fires as soon as the POST body has been parsed).
+  // Aborting on it turned every such blip into a failed estimate
+  // ("This operation was aborted"). Instead we keep generating (bounded by
+  // UPSTREAM_TIMEOUT_MS), stop writing to the dead socket, and still save the
+  // finished estimate to the session so a client retry can pick it up.
+  let clientGone = false;
+  let heartbeat = null;
+  const canWrite = () => !clientGone && !res.writableEnded && !res.destroyed;
+  const writeSse = (obj) => {
+    if (!canWrite()) return;
+    try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch { /* socket raced us */ }
+  };
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      console.log('[CalibiAI] client disconnected mid-stream — finishing generation in the background.');
+    }
+    clientGone = true;
+    if (heartbeat) clearInterval(heartbeat);
+  });
+  // A listener also stops an EPIPE-style 'error' from crashing the process
+  // when the client hangs up mid-write; 'close' above tracks the state.
+  res.on('error', (err) => console.error('[CalibiAI] response stream error:', err.message));
 
   res.set({
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -165,53 +218,65 @@ app.post('/api/chat', async (req, res) => {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
-  res.flushHeaders();
-  sse(res, { t: 'start', sessionId: session.id, mode: DEMO ? 'demo' : 'live', ref: session.ref });
+
+  // Heartbeat keeps the connection (and any proxy in front of it) from being
+  // treated as idle while DeepSeek works on the first token.
+  heartbeat = setInterval(() => {
+    if (canWrite()) {
+      try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
+    } else {
+      clearInterval(heartbeat);
+    }
+  }, HEARTBEAT_MS);
+
+  try { res.flushHeaders(); } catch { /* client already gone */ }
+  writeSse({ t: 'start', sessionId: session.id, mode: DEMO ? 'demo' : 'live', ref: session.ref });
 
   let full = '';
+  let errored = false;
   try {
     if (DEMO) {
-      sse(res, {
+      writeSse({
         t: 'notice',
         text: 'Demo mode — no DEEPSEEK_API_KEY configured. Add your key in .env for live DeepSeek estimates.',
       });
       const tokens = DEMO_RESPONSE.match(/\S+\s*/g) || [DEMO_RESPONSE];
       for (const tok of tokens) {
-        if (res.writableEnded) break;
+        if (!canWrite()) break;
         full += tok;
-        sse(res, { t: 'token', v: tok });
+        writeSse({ t: 'token', v: tok });
         await sleep(16);
       }
     } else {
       const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...session.history.slice(-14)];
-      const ac = new AbortController();
-      // Use the RESPONSE stream's close event to detect a real client disconnect.
-      // `req.on('close')` fires as soon as the POST body has been parsed (in live mode
-      // that aborts the DeepSeek request immediately → "This operation was aborted").
-      res.on('close', () => ac.abort());
       await streamDeepSeek(
         messages,
         (tok) => {
           full += tok;
-          if (!res.writableEnded) sse(res, { t: 'token', v: tok });
+          writeSse({ t: 'token', v: tok });
         },
-        ac.signal
+        AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
       );
     }
   } catch (err) {
+    errored = true;
     console.error('[CalibiAI] chat error:', err.message);
-    if (!res.writableEnded) {
-      sse(res, { t: 'error', message: `Estimation failed: ${err.message}. Please try again.` });
-    }
+    writeSse({ t: 'error', message: friendlyUpstreamError(err) });
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
   }
 
-  if (full.trim()) {
-    session.history.push({ role: 'assistant', content: full });
+  if (full.trim() && !errored) {
+    // If the client walked away, keep the finished estimate available for a
+    // later retry, but don't let this reply pollute the conversation history.
+    // A partial reply from a failed stream is likewise never saved, so that a
+    // retry sees a clean context (and `retry: true` dedupes the user message).
+    if (!clientGone) session.history.push({ role: 'assistant', content: full });
     if (full.includes('# CALIBIAI COMMERCIAL ESTIMATE')) session.lastEstimate = full;
     session.updatedAt = Date.now();
   }
-  if (!res.writableEnded) sse(res, { t: 'done', sessionId: session.id });
-  res.end();
+  writeSse({ t: 'done', sessionId: session.id });
+  if (!res.writableEnded && !res.destroyed) res.end();
 });
 
 // ---------------------------------------------------------------- API: PDF download
